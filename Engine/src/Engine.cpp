@@ -43,9 +43,9 @@ private:
 	bool _hasText = false;
 	std::unique_ptr<sf::Text> _text = nullptr;
 
-	float _posX = 0, _posY = 0, _posZ = 0;
+	sf::Vector2f _position{ 0.f, 0.f };
 
-	float _velX = 0, _velY = 0;
+	sf::Vector2f _velocity{ 0.f, 0.f };
 
 public:
 	static sf::Uint32 sCnt;
@@ -55,58 +55,95 @@ public:
 	[[nodiscard]] bool hasText() const { return _hasText; }
 	[[nodiscard]] sf::Text& getText() const { return *_text; }
 
+	void update(const sf::RenderTarget& target)
+	{
+		if (_shape->getGlobalBounds().left <= 0.f || _shape->getGlobalBounds().left + _shape->getGlobalBounds().width > target.getSize().x)
+		{
+			_velocity.x *= -1;
+		}
+		if (_shape->getGlobalBounds().top <= 0.f || _shape->getGlobalBounds().top + _shape->getGlobalBounds().height > target.getSize().y)
+		{
+			_velocity.y *= -1;
+		}
+		_position += _velocity;
+		_shape->setPosition(_position);
+		_text->move(_velocity);
+	}
 
 	Entity() 
 		: _ref { sCnt++ }
 	{}
 
-	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, float PosX, float PosY, float PosZ, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, float VelX, float VelY)
+	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, float PosX, float PosY, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, float VelX, float VelY)
 		: 
 		_ref { sCnt++ },
 		_isShape { true },
 		_shape { std::move(Shape) },
 		_hasText{ true },
 		_text{ std::move(Text) },
-		_posX{ PosX }, _posY{ PosY }, _posZ{ PosZ },
-		_velX { VelX }, _velY { VelY }
+		_position{ PosX, PosY },
+		_velocity { VelX , VelY }
 	{
-		_shape->setPosition(sf::Vector2f{ _posX, _posY });
+		_shape->setPosition(_position);
 		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition(sf::Vector2f{ _posX + _shape->getLocalBounds().width/2.f - _text->getLocalBounds().width / 2.f, _posY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		_text->setPosition(_position + sf::Vector2f{ _shape->getLocalBounds().width/2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
 	}
-
+	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, sf::Vector2f Position, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, sf::Vector2f Velocity)
+		:
+		_ref{ sCnt++ },
+		_isShape{ true },
+		_shape{ std::move(Shape) },
+		_hasText{ true },
+		_text{ std::move(Text) },
+		_position{ Position },
+		_velocity{ Velocity }
+	{
+		_shape->setPosition(_position);
+		_shape->setFillColor(std::move(sf::Color(R, G, B)));
+		_text->setPosition(_position + sf::Vector2f{ _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+	}
 };
 
 sf::Uint32 Entity::sCnt = 0;
 
 
-void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
-void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
+void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
+void gameRun(Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
 
-class GlobalFontSettings
+class GlobalSettings
 {
 public:
 	static sf::Font sGlobalFont;
+	static std::size_t sCirclePoints;
+	static unsigned int sTextSize;
+	static sf::Color sTextColor;
 };
-sf::Font GlobalFontSettings::sGlobalFont;
+sf::Font GlobalSettings::sGlobalFont;
+std::size_t GlobalSettings::sCirclePoints;
+unsigned int GlobalSettings::sTextSize;
+sf::Color GlobalSettings::sTextColor;
 
 void initGlobalSettings()
 {
-	if (!GlobalFontSettings::sGlobalFont.loadFromFile("fonts/arial.ttf"))
+	if (!GlobalSettings::sGlobalFont.loadFromFile("fonts/arial.ttf"))
 	{
 		std::cout << "Missing default font" << std::endl;
 	}
+	GlobalSettings::sCirclePoints = 30U;
+	GlobalSettings::sTextSize = 30U;
+	GlobalSettings::sTextColor = sf::Color{ 0xFFFFFFFF };
+
 }
 
 sf::Uint32 main()
 {
 	initGlobalSettings();
-	std::shared_ptr<Window> window = std::make_shared<Window>(800, 600);
+	std::unique_ptr<Window> window = std::make_unique<Window>(800, 600);
 	std::vector<std::unique_ptr<Entity>> entityVec;
 	std::string fileName = "config.txt";
-	loadConfigFromFile(fileName, window, entityVec);
+	loadConfigFromFile(fileName, *window, entityVec);
 
-	gameRun(window, entityVec);
+	gameRun(*window, entityVec);
 
 }
 
@@ -124,12 +161,12 @@ std::map<std::string, Shapes> correspondingShape
 
 
 template<typename T, typename... Args>
-std::unique_ptr<Entity> ConstructEntity(float PosX, float PosY, float PosZ, float VelX, float VelY, sf::Uint8 ColorR8, sf::Uint8 ColorG8, sf::Uint8 ColorB8, std::unique_ptr<sf::Text> Text, Args... ArgsPack)
+std::unique_ptr<Entity> ConstructEntity(float PosX, float PosY, float VelX, float VelY, sf::Uint8 ColorR8, sf::Uint8 ColorG8, sf::Uint8 ColorB8, std::unique_ptr<sf::Text> Text, Args... ArgsPack)
 {
-	return std::make_unique<Entity>(std::make_unique<T>(ArgsPack...), std::move(Text), PosX, PosY, PosZ, ColorR8, ColorG8, ColorB8, VelX, VelY);
+	return std::make_unique<Entity>(std::make_unique<T>(ArgsPack...), std::move(Text), PosX, PosY, ColorR8, ColorG8, ColorB8, VelX, VelY);
 }
 
-void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec) 
+void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec) 
 {
 	std::ifstream configFileStream(FileName);
 	std::string setting = "";
@@ -142,30 +179,27 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 		{
 			std::string textStr = "";
 			float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
-			float speedX = 0.0f, speedY = 0.0f;
 			float velX = 0.0f, velY = 0.0f;
-			sf::Int32 colorR32 = 0U, colorG32 = 0U, colorB32 = 0U;
-			configFileStream >> textStr >> posX >> posY >> speedX >> speedY >> colorR32 >> colorG32 >> colorB32;
-			sf::Uint8 colorR8 = colorR32, colorG8 = colorG32, colorB8 = colorB32;
-			std::unique_ptr<sf::Text> text = std::make_unique<sf::Text>(textStr, GlobalFontSettings::sGlobalFont);
-
+			sf::Uint32 colorR = 0U, colorG = 0U, colorB = 0U;
+			configFileStream >> textStr >> posX >> posY >> velX >> velY >> colorR >> colorG >> colorB;
+			std::unique_ptr<sf::Text> text = std::make_unique<sf::Text>(textStr, GlobalSettings::sGlobalFont, GlobalSettings::sTextSize);
+			text->setFillColor(GlobalSettings::sTextColor);
 			Shapes shapeNum = shapeIterator->second;
 			switch (shapeNum)
 			{
 			case Shapes::Circle:
 			{
-				std::size_t points = 300U;
+				std::size_t points = GlobalSettings::sCirclePoints;
 				float radius = 0.0f;
 				configFileStream >> radius;
-				EntityVec.push_back(std::move(ConstructEntity<sf::CircleShape>(posX, posY, posZ, velX, velY, colorR8, colorG8, colorB8, std::move(text), radius, points)));
+				EntityVec.push_back(std::move(ConstructEntity<sf::CircleShape>(posX, posY, velX, velY, colorR, colorG, colorB, std::move(text), radius, points)));
 				break;
 			}
 			case Shapes::Rectangle:
 			{
-				std::size_t points = 300U;
 				float width = 0.0f, height = 0.0f;
 				configFileStream >> width >> height;
-				EntityVec.push_back(std::move(ConstructEntity<sf::RectangleShape>(posX, posY, posZ, velX, velY, colorR8, colorG8, colorB8, std::move(text), std::move(sf::Vector2f{ width, height }))));
+				EntityVec.push_back(std::move(ConstructEntity<sf::RectangleShape>(posX, posY, velX, velY, colorR, colorG, colorB, std::move(text), std::move(sf::Vector2f{ width, height }))));
 				break;
 			}
 			default:
@@ -178,16 +212,20 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 		{
 			sf::Uint32 width = 800U, height = 600U;
 			configFileStream >> width >> height;
-			Window->getWindow()->setSize(sf::Vector2u{ width, height });
+			Window.getWindow()->setSize(sf::Vector2u{ width, height });
 		}
 		else if (setting == "Font")
 		{
-			std::string fontPath;
-			configFileStream >> fontPath;
-			if (!GlobalFontSettings::sGlobalFont.loadFromFile(fontPath))
+			std::string fontPath = "";
+			unsigned int textSize = 0U;
+			sf::Uint32 r = 0U, g = 0U, b = 0U;
+			configFileStream >> fontPath >> textSize >> r >> g >> b;
+			if (!GlobalSettings::sGlobalFont.loadFromFile(fontPath))
 			{
 				std::cout << "Font " << fontPath << " not found" << std::endl;
 			}
+			GlobalSettings::sTextSize = textSize;
+			GlobalSettings::sTextColor = sf::Color( r, g, b );
 			
 		}
 		else
@@ -199,9 +237,9 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 	}
 }
 
-void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
+void gameRun(Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
 {
-	const auto& window = Window->getWindow();
+	const auto& window = Window.getWindow();
 	window->setFramerateLimit(60U);
 	while (window->isOpen())
 	{
@@ -220,7 +258,7 @@ void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>
 		// draw everything here...
 		for (std::unique_ptr<Entity>& entityPtr : EntityVec)
 		{
-			const Entity& entity = *entityPtr;
+			Entity& entity = *entityPtr;
 			if (entity.isShape())
 			{
 				window->draw(entity.getShape());
@@ -233,6 +271,8 @@ void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>
 			{
 				window->draw(entity.getText());
 			}
+
+			entity.update(*window);
 		}
 
 		// end the current frame
