@@ -45,6 +45,8 @@ private:
 
 	float _posX = 0, _posY = 0, _posZ = 0;
 
+	float _velX = 0, _velY = 0;
+
 public:
 	static sf::Uint32 sCnt;
 
@@ -58,12 +60,19 @@ public:
 		: _ref { sCnt++ }
 	{}
 
-	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, float PosX, float PosY, float PosZ, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B)
-		: _ref { sCnt++ }, _isShape { true }, _shape { std::move(Shape) }, _hasText{ true }, _text{ std::move(Text) }, _posX{ PosX }, _posY{ PosY }, _posZ{ PosZ }
+	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, float PosX, float PosY, float PosZ, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, float VelX, float VelY)
+		: 
+		_ref { sCnt++ },
+		_isShape { true },
+		_shape { std::move(Shape) },
+		_hasText{ true },
+		_text{ std::move(Text) },
+		_posX{ PosX }, _posY{ PosY }, _posZ{ PosZ },
+		_velX { VelX }, _velY { VelY }
 	{
 		_shape->setPosition(sf::Vector2f{ _posX, _posY });
 		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition(sf::Vector2f{ _posX, _posY });
+		_text->setPosition(sf::Vector2f{ _posX + _shape->getLocalBounds().width/2.f - _text->getLocalBounds().width / 2.f, _posY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
 	}
 
 };
@@ -103,19 +112,21 @@ sf::Uint32 main()
 
 enum class Shapes : sf::Uint32 {
 	None = 0,
-	Circle
+	Circle,
+	Rectangle
 };
 
 std::map<std::string, Shapes> correspondingShape
 {
-	{"Circle", Shapes::Circle}
+	{"Circle", Shapes::Circle},
+	{"Rectangle", Shapes::Rectangle}
 };
 
 
 template<typename T, typename... Args>
-std::unique_ptr<Entity> ConstructEntity(float posX, float posY, float posZ, sf::Uint8 colorR8, sf::Uint8 colorG8, sf::Uint8 colorB8, std::unique_ptr<sf::Text> text, Args... args)
+std::unique_ptr<Entity> ConstructEntity(float PosX, float PosY, float PosZ, float VelX, float VelY, sf::Uint8 ColorR8, sf::Uint8 ColorG8, sf::Uint8 ColorB8, std::unique_ptr<sf::Text> Text, Args... ArgsPack)
 {
-	return std::make_unique<Entity>(std::make_unique<T>(args...), std::move(text), posX, posY, posZ, colorR8, colorG8, colorB8);
+	return std::make_unique<Entity>(std::make_unique<T>(ArgsPack...), std::move(Text), PosX, PosY, PosZ, ColorR8, ColorG8, ColorB8, VelX, VelY);
 }
 
 void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec) 
@@ -132,6 +143,7 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 			std::string textStr = "";
 			float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
 			float speedX = 0.0f, speedY = 0.0f;
+			float velX = 0.0f, velY = 0.0f;
 			sf::Int32 colorR32 = 0U, colorG32 = 0U, colorB32 = 0U;
 			configFileStream >> textStr >> posX >> posY >> speedX >> speedY >> colorR32 >> colorG32 >> colorB32;
 			sf::Uint8 colorR8 = colorR32, colorG8 = colorG32, colorB8 = colorB32;
@@ -142,11 +154,18 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 			{
 			case Shapes::Circle:
 			{
-				//CGreen 100 100 - 0.03 0.02 0 255 50
-				std::size_t points = 30U;
+				std::size_t points = 300U;
 				float radius = 0.0f;
 				configFileStream >> radius;
-				EntityVec.push_back(std::move(ConstructEntity<sf::CircleShape>(posX, posY, posZ, colorR8, colorG8, colorB8, std::move(text), radius, points)));
+				EntityVec.push_back(std::move(ConstructEntity<sf::CircleShape>(posX, posY, posZ, velX, velY, colorR8, colorG8, colorB8, std::move(text), radius, points)));
+				break;
+			}
+			case Shapes::Rectangle:
+			{
+				std::size_t points = 300U;
+				float width = 0.0f, height = 0.0f;
+				configFileStream >> width >> height;
+				EntityVec.push_back(std::move(ConstructEntity<sf::RectangleShape>(posX, posY, posZ, velX, velY, colorR8, colorG8, colorB8, std::move(text), std::move(sf::Vector2f{ width, height }))));
 				break;
 			}
 			default:
@@ -183,7 +202,7 @@ void loadConfigFromFile(std::string FileName, std::shared_ptr<Window> Window, st
 void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
 {
 	const auto& window = Window->getWindow();
-	window->setFramerateLimit(180);
+	window->setFramerateLimit(60U);
 	while (window->isOpen())
 	{
 		// check all the window's events that were triggered since the last iteration of the loop
@@ -205,6 +224,10 @@ void gameRun(std::shared_ptr<Window> Window, std::vector<std::unique_ptr<Entity>
 			if (entity.isShape())
 			{
 				window->draw(entity.getShape());
+				auto a = entity.getShape().getLocalBounds();
+				std::cout << a.top << " " << a.left << " " << a.height << " " << a.width << " " << std::endl;
+				auto b = entity.getShape().getGlobalBounds();
+				std::cout << b.top << " " << b.left << " " << b.height << " " << b.width << " " << std::endl;
 			}
 			if (entity.hasText())
 			{

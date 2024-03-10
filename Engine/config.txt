@@ -1,4 +1,4 @@
-Window 800 600
+Window 1600 1200
 Font fonts/BagnardSans.otf 18 255 255 255
-Circle CGreenandsomemoretextwooooow 10 10 -0.03 0.02 0 255 0 50
-Circle CBlueandsomeothertextherehehehehehe 300 300 -0.03 0.02 0 0 255 80
+Circle CGREENAA 10 10 -0.03 0.02 0 255 0 50
+Circle O 400 400 -0.03 0.02 0 0 255 12
