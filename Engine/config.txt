@@ -2,3 +2,5 @@ Window 800 600
 Font fonts/BagnardSans.otf 30 255 255 0
 Circle CGREENAA 10 10 -3 3 0 255 0 50
 Circle O 400 400 -3 3 0 0 255 12
+Rectangle Thestoopidrectangle 500 300 -1 1 255 0 0 40 50
+Rectangle Andhisbrother 500 300 -3 3 255 0 0 5 6

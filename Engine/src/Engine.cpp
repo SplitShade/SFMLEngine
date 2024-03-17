@@ -7,32 +7,7 @@
 #include <memory>
 #include <fstream>
 
-class Window
-{
-private:
-	sf::Uint32 _width = 800, _height = 600;
-	std::string _name = "My window";
-	std::shared_ptr<sf::RenderWindow> _window;
-
-public:
-
-	[[nodiscard]] sf::Uint32 getWidth() const { return _width; }
-	[[nodiscard]] sf::Uint32 getHeight() const { return _height; }
-	[[nodiscard]] std::shared_ptr<sf::RenderWindow> getWindow() const { return _window; }
-
-	void setWidth(sf::Uint32 Width) { _width = Width; }
-	void setHeight(sf::Uint32 Height) { _height = Height; }
-	[[nodiscard]] bool isOpen() const { return _window->isOpen(); }
-
-	Window() 
-		:_window{ std::make_unique<sf::RenderWindow>(sf::VideoMode(_width, _height), _name) }
-	{}
-	Window(sf::Uint32 Width, sf::Uint32 Height, std::string Name = "My window")
-		:_width{ Width }, _height{ Height }, _name{ Name }, _window{ std::make_unique<sf::RenderWindow>(sf::VideoMode(Width, Height), Name) }
-	{}
-};
-
-class Entity
+class Entity : public sf::Drawable
 {
 private:
 	sf::Uint32 _ref;
@@ -42,8 +17,6 @@ private:
 
 	bool _hasText = false;
 	std::unique_ptr<sf::Text> _text = nullptr;
-
-	sf::Vector2f _position{ 0.f, 0.f };
 
 	sf::Vector2f _velocity{ 0.f, 0.f };
 
@@ -55,19 +28,44 @@ public:
 	[[nodiscard]] bool hasText() const { return _hasText; }
 	[[nodiscard]] sf::Text& getText() const { return *_text; }
 
-	void update(const sf::RenderTarget& target)
+	void update(const sf::RenderWindow& target)
 	{
-		if (_shape->getGlobalBounds().left <= 0.f || _shape->getGlobalBounds().left + _shape->getGlobalBounds().width > target.getSize().x)
+		if (_isShape)
 		{
-			_velocity.x *= -1;
+			if (_shape->getGlobalBounds().left <= 0.f || _shape->getGlobalBounds().left + _shape->getGlobalBounds().width > target.getSize().x)
+			{
+				_velocity.x *= -1;
+			}
+			if (_shape->getGlobalBounds().top <= 0.f || _shape->getGlobalBounds().top + _shape->getGlobalBounds().height > target.getSize().y)
+			{
+				_velocity.y *= -1;
+			}
+
+			_shape->move(_velocity);
 		}
-		if (_shape->getGlobalBounds().top <= 0.f || _shape->getGlobalBounds().top + _shape->getGlobalBounds().height > target.getSize().y)
+		if (_hasText)
 		{
-			_velocity.y *= -1;
+			_text->move(_velocity);
 		}
-		_position += _velocity;
-		_shape->setPosition(_position);
-		_text->move(_velocity);
+	}
+
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
+	{
+		// Draw other high-level objects
+		if (_isShape)
+		{
+			target.draw(*_shape, states);
+		}
+
+		if (_hasText)
+		{
+			target.draw(*_text, states);
+		}
+
+		// Or use the low-level API
+		//states.texture = &m_texture;
+		//target.draw(m_vertices, states);
+
 	}
 
 	Entity() 
@@ -81,34 +79,32 @@ public:
 		_shape { std::move(Shape) },
 		_hasText{ true },
 		_text{ std::move(Text) },
-		_position{ PosX, PosY },
 		_velocity { VelX , VelY }
 	{
-		_shape->setPosition(_position);
+		_shape->setPosition( PosX, PosY );
 		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition(_position + sf::Vector2f{ _shape->getLocalBounds().width/2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		_text->setPosition(sf::Vector2f{ PosX + _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, PosY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
 	}
 	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, sf::Vector2f Position, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, sf::Vector2f Velocity)
 		:
-		_ref{ sCnt++ },
-		_isShape{ true },
-		_shape{ std::move(Shape) },
-		_hasText{ true },
-		_text{ std::move(Text) },
-		_position{ Position },
-		_velocity{ Velocity }
+		_ref { sCnt++ },
+		_isShape { true },
+		_shape { std::move(Shape) },
+		_hasText { true },
+		_text { std::move(Text) },
+		_velocity { std::move(Velocity) }
 	{
-		_shape->setPosition(_position);
-		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition(_position + sf::Vector2f{ _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		_shape->setPosition( std::move(Position) );
+		_shape->setFillColor( std::move(sf::Color(R, G, B)) );
+		_text->setPosition( Position + sf::Vector2f{ _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
 	}
 };
 
 sf::Uint32 Entity::sCnt = 0;
 
 
-void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
-void gameRun(Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
+void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
+void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& EntityVec);
 
 class GlobalSettings
 {
@@ -138,12 +134,12 @@ void initGlobalSettings()
 sf::Uint32 main()
 {
 	initGlobalSettings();
-	std::unique_ptr<Window> window = std::make_unique<Window>(800, 600);
+	sf::RenderWindow window = sf::RenderWindow(sf::VideoMode(800, 600), "Main Window");
 	std::vector<std::unique_ptr<Entity>> entityVec;
 	std::string fileName = "config.txt";
-	loadConfigFromFile(fileName, *window, entityVec);
+	loadConfigFromFile(fileName, window, entityVec);
 
-	gameRun(*window, entityVec);
+	gameRun(window, entityVec);
 
 }
 
@@ -166,7 +162,7 @@ std::unique_ptr<Entity> ConstructEntity(float PosX, float PosY, float VelX, floa
 	return std::make_unique<Entity>(std::make_unique<T>(ArgsPack...), std::move(Text), PosX, PosY, ColorR8, ColorG8, ColorB8, VelX, VelY);
 }
 
-void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec) 
+void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
 {
 	std::ifstream configFileStream(FileName);
 	std::string setting = "";
@@ -212,7 +208,7 @@ void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::un
 		{
 			sf::Uint32 width = 800U, height = 600U;
 			configFileStream >> width >> height;
-			Window.getWindow()->setSize(sf::Vector2u{ width, height });
+			Window.setSize(sf::Vector2u{ width, height });
 		}
 		else if (setting == "Font")
 		{
@@ -237,45 +233,51 @@ void loadConfigFromFile(std::string FileName, Window Window, std::vector<std::un
 	}
 }
 
-void gameRun(Window Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
+void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
 {
-	const auto& window = Window.getWindow();
-	window->setFramerateLimit(60U);
-	while (window->isOpen())
+	Window.setFramerateLimit(60U);
+	bool started = false;
+	while (Window.isOpen())
 	{
 		// check all the window's events that were triggered since the last iteration of the loop
 		sf::Event event;
-		while (window->pollEvent(event))
+		while (Window.pollEvent(event))
 		{
 			// "close requested" event: we close the window
 			if (event.type == sf::Event::Closed)
-				window->close();
+			{
+				Window.close();
+			}
+			// "close requested" event: we close the window
+			if (event.type == sf::Event::KeyPressed)
+			{
+				if (event.key.scancode == sf::Keyboard::Scan::Space)
+				{
+					started = !started;
+				}
+			}
 		}
 
 		// clear the window with black color
-		window->clear(sf::Color::Black);
+		Window.clear(sf::Color::Black);
 
 		// draw everything here...
-		for (std::unique_ptr<Entity>& entityPtr : EntityVec)
+		for (std::unique_ptr<Entity>& entity : EntityVec)
 		{
-			Entity& entity = *entityPtr;
-			if (entity.isShape())
+			Window.draw(*entity);
+			/*auto a = entity->getShape().getLocalBounds();
+			std::cout << a.top << " " << a.left << " " << a.height << " " << a.width << " " << std::endl;
+			auto b = entity->getShape().getGlobalBounds();
+			std::cout << b.top << " " << b.left << " " << b.height << " " << b.width << " " << std::endl;
+			*/
+			
+			if (started)
 			{
-				window->draw(entity.getShape());
-				auto a = entity.getShape().getLocalBounds();
-				std::cout << a.top << " " << a.left << " " << a.height << " " << a.width << " " << std::endl;
-				auto b = entity.getShape().getGlobalBounds();
-				std::cout << b.top << " " << b.left << " " << b.height << " " << b.width << " " << std::endl;
+				entity->update(Window);
 			}
-			if (entity.hasText())
-			{
-				window->draw(entity.getText());
-			}
-
-			entity.update(*window);
 		}
 
 		// end the current frame
-		window->display();
+		Window.display();
 	}
 }
