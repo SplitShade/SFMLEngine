@@ -30,22 +30,51 @@ public:
 
 	void update(const sf::RenderWindow& target)
 	{
+		sf::Vector2f currentMove(_velocity);
+		sf::Vector2f diff = { 0.f, 0.f };
+		bool outOfBounds = false;
 		if (_isShape)
 		{
-			if (_shape->getGlobalBounds().left <= 0.f || _shape->getGlobalBounds().left + _shape->getGlobalBounds().width > target.getSize().x)
+			_shape->move(currentMove);
+
+			sf::FloatRect globalBounds = _shape->getGlobalBounds();
+			sf::Vector2u targetSize = target.getSize();
+			if (globalBounds.left < 0.f)
 			{
 				_velocity.x *= -1;
+				outOfBounds = true;
+				diff.x = 2 * -globalBounds.left;
 			}
-			if (_shape->getGlobalBounds().top <= 0.f || _shape->getGlobalBounds().top + _shape->getGlobalBounds().height > target.getSize().y)
+			if (globalBounds.left + globalBounds.width > targetSize.x)
+			{
+				_velocity.x *= -1;
+				outOfBounds = true;
+				diff.x = 2 * (targetSize.x - globalBounds.left - globalBounds.width);
+			}
+			if (globalBounds.top < 0.f)
 			{
 				_velocity.y *= -1;
+				outOfBounds = true;
+				diff.y = 2 * -globalBounds.top;
 			}
-
-			_shape->move(_velocity);
+			if (globalBounds.top + globalBounds.height > targetSize.y)
+			{
+ 				_velocity.y *= -1;
+				outOfBounds = true;
+				diff.y = 2 * (targetSize.y - globalBounds.top - globalBounds.height);
+			}
+			if (outOfBounds)
+			{
+				_shape->move(diff);
+			}
 		}
 		if (_hasText)
 		{
-			_text->move(_velocity);
+			_text->move(currentMove);
+			if (outOfBounds)
+			{
+				_text->move(diff);
+			}
 		}
 	}
 
@@ -83,7 +112,7 @@ public:
 	{
 		_shape->setPosition( PosX, PosY );
 		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition(sf::Vector2f{ PosX + _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, PosY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		_text->setPosition( PosX + _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, PosY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top );
 	}
 	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, sf::Vector2f Position, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, sf::Vector2f Velocity)
 		:
@@ -125,7 +154,7 @@ void initGlobalSettings()
 	{
 		std::cout << "Missing default font" << std::endl;
 	}
-	GlobalSettings::sCirclePoints = 30U;
+	GlobalSettings::sCirclePoints = 60U;
 	GlobalSettings::sTextSize = 30U;
 	GlobalSettings::sTextColor = sf::Color{ 0xFFFFFFFF };
 
@@ -134,7 +163,11 @@ void initGlobalSettings()
 sf::Uint32 main()
 {
 	initGlobalSettings();
-	sf::RenderWindow window = sf::RenderWindow(sf::VideoMode(800, 600), "Main Window");
+
+	sf::ContextSettings settings;
+	settings.antialiasingLevel = 8;
+
+	sf::RenderWindow window = sf::RenderWindow(sf::VideoMode(800, 600), "Main Window", sf::Style::Default, settings);
 	std::vector<std::unique_ptr<Entity>> entityVec;
 	std::string fileName = "config.txt";
 	loadConfigFromFile(fileName, window, entityVec);
@@ -208,7 +241,7 @@ void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vec
 		{
 			sf::Uint32 width = 800U, height = 600U;
 			configFileStream >> width >> height;
-			Window.setSize(sf::Vector2u{ width, height });
+			Window.create(sf::VideoMode(width, height), "My window");
 		}
 		else if (setting == "Font")
 		{
@@ -236,42 +269,59 @@ void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vec
 void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& EntityVec)
 {
 	Window.setFramerateLimit(60U);
-	bool started = false;
+	bool paused = true;
 	while (Window.isOpen())
 	{
 		// check all the window's events that were triggered since the last iteration of the loop
 		sf::Event event;
 		while (Window.pollEvent(event))
 		{
-			// "close requested" event: we close the window
-			if (event.type == sf::Event::Closed)
+			switch (event.type)
+			{
+				// "close requested" event: we close the window
+			case sf::Event::Closed:
 			{
 				Window.close();
+				break;
 			}
-			// "close requested" event: we close the window
-			if (event.type == sf::Event::KeyPressed)
+			// "key pressed" event
+			case sf::Event::KeyPressed:
 			{
-				if (event.key.scancode == sf::Keyboard::Scan::Space)
+				switch (event.key.scancode)
 				{
-					started = !started;
+					case sf::Keyboard::Scan::Space:
+					{
+						paused = !paused;
+						break;
+					}
 				}
+				break;
+			}
+			case sf::Event::Resized:
+			{
+				if (event.type == sf::Event::Resized)
+				{
+					Window.create(sf::VideoMode(Window.getSize().x, Window.getSize().y), "My Window");
+					Window.setFramerateLimit(60U);
+					std::cout << "new width: " << event.size.width << std::endl;
+					std::cout << "new height: " << event.size.height << std::endl;
+				}
+				break;
+			}
+
 			}
 		}
 
 		// clear the window with black color
 		Window.clear(sf::Color::Black);
+		//Window.set
 
 		// draw everything here...
 		for (std::unique_ptr<Entity>& entity : EntityVec)
 		{
 			Window.draw(*entity);
-			/*auto a = entity->getShape().getLocalBounds();
-			std::cout << a.top << " " << a.left << " " << a.height << " " << a.width << " " << std::endl;
-			auto b = entity->getShape().getGlobalBounds();
-			std::cout << b.top << " " << b.left << " " << b.height << " " << b.width << " " << std::endl;
-			*/
-			
-			if (started)
+
+			if (!paused)
 			{
 				entity->update(Window);
 			}
