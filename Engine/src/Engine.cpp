@@ -104,28 +104,40 @@ public:
 	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, float PosX, float PosY, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, float VelX, float VelY)
 		: 
 		_ref { sCnt++ },
-		_isShape { true },
+		_isShape { Shape != nullptr },
 		_shape { std::move(Shape) },
-		_hasText{ true },
+		_hasText{ Text != nullptr },
 		_text{ std::move(Text) },
 		_velocity { VelX , VelY }
 	{
-		_shape->setPosition( PosX, PosY );
-		_shape->setFillColor(std::move(sf::Color(R, G, B)));
-		_text->setPosition( PosX + _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, PosY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top );
+		if (_isShape)
+		{
+			_shape->setPosition( PosX, PosY );
+			_shape->setFillColor(std::move(sf::Color(R, G, B)));
+		}
+		if (_hasText)
+		{
+			_text->setPosition( PosX + _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, PosY + _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top );
+		}
 	}
 	Entity(std::unique_ptr<sf::Shape> Shape, std::unique_ptr<sf::Text> Text, sf::Vector2f Position, sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, sf::Vector2f Velocity)
 		:
 		_ref { sCnt++ },
-		_isShape { true },
+		_isShape { Shape != nullptr },
 		_shape { std::move(Shape) },
-		_hasText { true },
+		_hasText { Text != nullptr },
 		_text { std::move(Text) },
 		_velocity { std::move(Velocity) }
 	{
-		_shape->setPosition( std::move(Position) );
-		_shape->setFillColor( std::move(sf::Color(R, G, B)) );
-		_text->setPosition( Position + sf::Vector2f{ _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		if (_isShape)
+		{
+			_shape->setPosition(std::move(Position));
+			_shape->setFillColor(std::move(sf::Color(R, G, B)));
+		}
+		if (_hasText)
+		{
+			_text->setPosition(Position + sf::Vector2f{ _shape->getLocalBounds().width / 2.f - _text->getLocalBounds().width / 2.f, _shape->getLocalBounds().height / 2.f - _text->getLocalBounds().height / 2.f - _text->getLocalBounds().top });
+		}
 	}
 };
 
@@ -137,11 +149,25 @@ void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& Ent
 
 class GlobalSettings
 {
-public:
-	static sf::Font sGlobalFont;
-	static std::size_t sCirclePoints;
+private:
 	static unsigned int sTextSize;
 	static sf::Color sTextColor;
+	static sf::Font sGlobalFont;
+	static std::size_t sCirclePoints;
+
+public:
+	static void SetTextSize(unsigned int textSize) { sTextSize = textSize; }
+	static unsigned int GetTextSize() { return sTextSize; }
+
+	static void SetTextColor(const sf::Color& textColor) { sTextColor = textColor; }
+	static void SetTextColor(sf::Uint8 R, sf::Uint8 G, sf::Uint8 B, sf::Uint8 Alpha = (sf::Uint8)255U) { sTextColor = sf::Color(R, G, B, Alpha); }
+	static sf::Color GetTextColor() { return sTextColor; }
+
+	static void SetCirclePoints(std::size_t points) { sCirclePoints = points; }
+	static std::size_t GetCirclePoints() { return sCirclePoints; }
+
+	static bool SetGlobalFont(const std::string& filename) { return sGlobalFont.loadFromFile(filename); }
+	static const sf::Font& GetGlobalFont() { return sGlobalFont; }
 };
 sf::Font GlobalSettings::sGlobalFont;
 std::size_t GlobalSettings::sCirclePoints;
@@ -150,13 +176,13 @@ sf::Color GlobalSettings::sTextColor;
 
 void initGlobalSettings()
 {
-	if (!GlobalSettings::sGlobalFont.loadFromFile("fonts/arial.ttf"))
+	if (!GlobalSettings::SetGlobalFont("fonts/arial.ttf"))
 	{
 		std::cout << "Missing default font" << std::endl;
 	}
-	GlobalSettings::sCirclePoints = 60U;
-	GlobalSettings::sTextSize = 30U;
-	GlobalSettings::sTextColor = sf::Color{ 0xFFFFFFFF };
+	GlobalSettings::SetCirclePoints(60U);
+	GlobalSettings::SetTextSize(30U);
+	GlobalSettings::SetTextColor(sf::Color{ 0xFFFFFFFF });
 
 }
 
@@ -188,7 +214,6 @@ std::map<std::string, Shapes> correspondingShape
 	{"Rectangle", Shapes::Rectangle}
 };
 
-
 template<typename T, typename... Args>
 std::unique_ptr<Entity> ConstructEntity(float PosX, float PosY, float VelX, float VelY, sf::Uint8 ColorR8, sf::Uint8 ColorG8, sf::Uint8 ColorB8, std::unique_ptr<sf::Text> Text, Args... ArgsPack)
 {
@@ -211,14 +236,14 @@ void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vec
 			float velX = 0.0f, velY = 0.0f;
 			sf::Uint32 colorR = 0U, colorG = 0U, colorB = 0U;
 			configFileStream >> textStr >> posX >> posY >> velX >> velY >> colorR >> colorG >> colorB;
-			std::unique_ptr<sf::Text> text = std::make_unique<sf::Text>(textStr, GlobalSettings::sGlobalFont, GlobalSettings::sTextSize);
-			text->setFillColor(GlobalSettings::sTextColor);
+			std::unique_ptr<sf::Text> text = std::make_unique<sf::Text>(textStr, GlobalSettings::GetGlobalFont(), GlobalSettings::GetTextSize());
+			text->setFillColor(GlobalSettings::GetTextColor());
 			Shapes shapeNum = shapeIterator->second;
 			switch (shapeNum)
 			{
 			case Shapes::Circle:
 			{
-				std::size_t points = GlobalSettings::sCirclePoints;
+				std::size_t points = GlobalSettings::GetCirclePoints();
 				float radius = 0.0f;
 				configFileStream >> radius;
 				EntityVec.push_back(std::move(ConstructEntity<sf::CircleShape>(posX, posY, velX, velY, colorR, colorG, colorB, std::move(text), radius, points)));
@@ -249,12 +274,12 @@ void loadConfigFromFile(std::string FileName, sf::RenderWindow& Window, std::vec
 			unsigned int textSize = 0U;
 			sf::Uint32 r = 0U, g = 0U, b = 0U;
 			configFileStream >> fontPath >> textSize >> r >> g >> b;
-			if (!GlobalSettings::sGlobalFont.loadFromFile(fontPath))
+			if (!GlobalSettings::SetGlobalFont(fontPath))
 			{
 				std::cout << "Font " << fontPath << " not found" << std::endl;
 			}
-			GlobalSettings::sTextSize = textSize;
-			GlobalSettings::sTextColor = sf::Color( r, g, b );
+			GlobalSettings::SetTextSize(textSize);
+			GlobalSettings::SetTextColor(sf::Color(r, g, b));
 			
 		}
 		else
@@ -278,7 +303,7 @@ void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& Ent
 		{
 			switch (event.type)
 			{
-				// "close requested" event: we close the window
+			// "close requested" event: we close the window
 			case sf::Event::Closed:
 			{
 				Window.close();
@@ -314,7 +339,6 @@ void gameRun(sf::RenderWindow& Window, std::vector<std::unique_ptr<Entity>>& Ent
 
 		// clear the window with black color
 		Window.clear(sf::Color::Black);
-		//Window.set
 
 		// draw everything here...
 		for (std::unique_ptr<Entity>& entity : EntityVec)
